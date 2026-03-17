@@ -1,13 +1,17 @@
+pub mod display;
 pub mod pins;
 
-/// Board peripherals. Constructed via `Board::init()`.
-pub struct Board;
+pub use display::{Display, DisplayError};
+
+/// Initialized board peripherals.
+pub struct Board {
+    pub display: Display,
+}
 
 impl Board {
-    /// Initialize board hardware.
-    /// Currently a placeholder — display init added in Task 3.
-    pub fn init() -> Result<Self, Box<dyn std::error::Error>> {
-        log::info!("Board init (placeholder)");
-        Ok(Self)
+    /// Initialize all board hardware.
+    pub fn init() -> Result<Self, DisplayError> {
+        let display = Display::init()?;
+        Ok(Self { display })
     }
 }

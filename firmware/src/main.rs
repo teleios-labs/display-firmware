@@ -18,7 +18,6 @@ fn main() {
     };
 
     loop {
-        log::info!("Still alive!");
         std::thread::sleep(std::time::Duration::from_secs(5));
     }
 }
