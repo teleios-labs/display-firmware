@@ -1,0 +1,18 @@
+[package]
+name = "display-firmware"
+version = "0.1.0"
+edition = "2021"
+resolver = "2"
+
+[[bin]]
+name = "display-firmware"
+harness = false
+
+[dependencies]
+log = "0.4"
+anyhow = "1"
+esp-idf-svc = "0.52"
+bsp-waveshare-p4 = { path = "../bsp-waveshare-p4" }
+
+[build-dependencies]
+embuild = "0.33"

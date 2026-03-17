@@ -1,7 +1,7 @@
 [build]
-target = "xtensa-esp32s3-espidf"
+target = "riscv32imafc-esp-espidf"
 
-[target.xtensa-esp32s3-espidf]
+[target.riscv32imafc-esp-espidf]
 linker = "ldproxy"
 runner = "espflash flash --monitor"
 
@@ -9,5 +9,5 @@ runner = "espflash flash --monitor"
 build-std = ["std", "panic_abort"]
 
 [env]
-MCU = "esp32s3"
-ESP_IDF_VERSION = "v5.3.2"
+MCU = "esp32p4"
+ESP_IDF_VERSION = "v5.4.3"
