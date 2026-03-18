@@ -1,3 +1,7 @@
+mod slint_backend;
+
+slint::include_modules!();
+
 use bsp_waveshare_p4::Board;
 
 fn main() {
@@ -6,18 +10,18 @@ fn main() {
 
     log::info!("Display firmware starting on ESP32-P4...");
 
-    let _board = match Board::init() {
-        Ok(board) => {
-            log::info!("Board initialized successfully");
-            board
-        }
-        Err(e) => {
-            log::error!("Board init failed: {e}");
-            panic!("Cannot continue without board: {e}");
-        }
-    };
+    let board = Board::init().expect("board init failed");
+    log::info!("Board initialized — display online");
 
-    loop {
-        std::thread::sleep(std::time::Duration::from_secs(5));
-    }
+    // Set up Slint platform.
+    // set_platform() takes ownership, so we extract the window handle first.
+    let (platform, window) = slint_backend::EspDisplayPlatform::new();
+    slint::platform::set_platform(Box::new(platform)).expect("set_platform failed");
+
+    // Create and show the UI window
+    let ui = MainWindow::new().expect("MainWindow creation failed");
+    ui.show().expect("show failed");
+
+    // Render loop — never returns
+    slint_backend::run_event_loop(&window, &board.display);
 }

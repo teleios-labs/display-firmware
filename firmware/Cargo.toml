@@ -13,6 +13,8 @@ log = "0.4"
 anyhow = "1"
 esp-idf-svc = "0.52"
 bsp-waveshare-p4 = { path = "../bsp-waveshare-p4" }
+slint = { version = "1.15", default-features = false, features = ["compat-1-2", "unsafe-single-threaded", "libm", "renderer-software"] }
 
 [build-dependencies]
 embuild = "0.33"
+slint-build = "1.15"
