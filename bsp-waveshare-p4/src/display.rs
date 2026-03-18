@@ -162,10 +162,10 @@ impl Display {
     /// Draw a horizontal line of RGB565 pixels at the given y coordinate.
     /// Called by the Slint render loop to push rendered lines to the display.
     pub fn draw_pixels(&self, y: u32, pixels: &[u16]) -> Result<(), DisplayError> {
-        debug_assert_eq!(
+        debug_assert!(
+            pixels.len() <= crate::pins::LCD_H_RES as usize,
+            "draw_pixels: pixel slice ({}) exceeds LCD_H_RES ({})",
             pixels.len(),
-            crate::pins::LCD_H_RES as usize,
-            "draw_pixels: pixel slice must be exactly LCD_H_RES ({}) pixels wide",
             crate::pins::LCD_H_RES
         );
 
