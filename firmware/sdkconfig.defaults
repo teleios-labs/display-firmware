@@ -1,8 +1,13 @@
 # ESP32-P4 target
 CONFIG_IDF_TARGET="esp32p4"
 
-# Flash
-CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+# Chip revision: Waveshare board has v1.3 silicon (pre-v3.0 "preliminary" chip)
+# These are REQUIRED for ESP-IDF 5.5.x on pre-v3.0 chips
+CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y
+CONFIG_ESP32P4_REV_MIN_100=y
+
+# Flash (DIO mode — QIO crashes on this board during flash ID read)
+CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
 CONFIG_ESPTOOLPY_FLASHSIZE_32MB=y
 
 # PSRAM (required for display framebuffer)
@@ -15,6 +20,10 @@ CONFIG_CACHE_L2_CACHE_LINE_128B=y
 
 # Required for MIPI DSI
 CONFIG_IDF_EXPERIMENTAL_FEATURES=y
+
+# Console output via USB Serial/JTAG (must explicitly unset UART default)
+# CONFIG_ESP_CONSOLE_UART_DEFAULT is not set
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 
 # Stack size (Slint needs headroom)
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=10240
