@@ -71,7 +71,7 @@ impl Display {
         let dsi_bus_cfg = esp_lcd_dsi_bus_config_t {
             bus_id: 0,
             num_data_lanes: pins::DSI_LANE_COUNT,
-            phy_clk_src: soc_periph_mipi_dsi_phy_clk_src_t_MIPI_DSI_PHY_CLK_SRC_DEFAULT,
+            phy_clk_src: 0, // 0 = use legacy default; ESP-IDF auto-selects the correct PLL source
             lane_bit_rate_mbps: pins::DSI_LANE_BITRATE_MBPS,
         };
         let mut dsi_bus: esp_lcd_dsi_bus_handle_t = std::ptr::null_mut();
@@ -96,7 +96,7 @@ impl Display {
 
         let mut dpi_cfg = esp_lcd_dpi_panel_config_t {
             virtual_channel: 0,
-            dpi_clk_src: soc_periph_mipi_dsi_dpi_clk_src_t_MIPI_DSI_DPI_CLK_SRC_DEFAULT,
+            dpi_clk_src: 0, // 0 = use default; ESP-IDF auto-selects
             dpi_clock_freq_mhz: pins::LCD_PIXEL_CLOCK_MHZ,
             pixel_format: lcd_color_rgb_pixel_format_t_LCD_COLOR_PIXEL_FORMAT_RGB565,
             in_color_format: lcd_color_format_t_LCD_COLOR_FMT_RGB565,
@@ -114,11 +114,10 @@ impl Display {
         }
 
         // 4. Init panel and turn on
+        // Note: DPI panels don't support reset — skip it (returns ESP_ERR_NOT_SUPPORTED)
         log::info!("Initializing and enabling panel");
         unsafe {
-            esp_check(esp_lcd_panel_reset(panel)).map_err(DisplayError::PanelInit)?;
             esp_check(esp_lcd_panel_init(panel)).map_err(DisplayError::PanelInit)?;
-            esp_check(esp_lcd_panel_disp_on_off(panel, true)).map_err(DisplayError::PanelInit)?;
         }
 
         // 5. Configure backlight (LEDC PWM)
