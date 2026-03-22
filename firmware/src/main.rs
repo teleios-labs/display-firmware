@@ -8,44 +8,47 @@ fn main() {
     esp_idf_svc::sys::link_patches();
     esp_idf_svc::log::EspLogger::initialize_default();
 
-    // Force output via printf to bypass any log buffering
+    // Wait for USB Serial/JTAG to enumerate on host.
+    // 10s is generous — gives time to start `cat` on the serial port.
+    std::thread::sleep(std::time::Duration::from_secs(10));
+
     unsafe {
         esp_idf_svc::sys::printf(b">>> RUST FIRMWARE ALIVE <<<\n\0".as_ptr() as *const _);
     }
-
-    log::info!("========================================");
     log::info!("Display firmware starting on ESP32-P4...");
-    log::info!("========================================");
 
     log::info!("About to call Board::init()...");
-    let board = Board::init().expect("board init failed");
-    log::info!("Board initialized — display online");
+    match Board::init() {
+        Ok(board) => {
+            log::info!("!!! Board init SUCCESS !!!");
 
-    log::info!("Testing display with solid color fill...");
-    // Fill screen with bright red to test display pipeline
-    let red_pixel: u16 = 0xF800; // RGB565 red
-    let row: Vec<u16> = vec![red_pixel; 1024];
-    for y in 0..600u32 {
-        if let Err(e) = board.display.draw_pixels(y, &row) {
-            log::error!("draw_pixels failed at row {y}: {e}");
-            break;
+            log::info!("Testing green fill (RGB888)...");
+            // Try bright green — unambiguous regardless of RGB/BGR order
+            let mut row: Vec<u8> = vec![0u8; 1024 * 3];
+            for i in (0..row.len()).step_by(3) {
+                row[i] = 0x00;
+                row[i + 1] = 0xFF; // Green — same position in both RGB and BGR
+                row[i + 2] = 0x00;
+            }
+            for y in 0..600u32 {
+                if let Err(e) = board.display.draw_pixels_raw(y, &row) {
+                    log::error!("draw_pixels row {y}: {e}");
+                    break;
+                }
+                if y % 100 == 0 {
+                    log::info!("  fill row {y}/600");
+                }
+            }
+            log::info!("Red fill done — check display!");
+        }
+        Err(e) => {
+            log::error!("!!! Board init FAILED: {e} !!!");
         }
     }
-    log::info!("Solid red fill complete — check display!");
 
-    // Pause so we can see the result before Slint takes over
-    std::thread::sleep(std::time::Duration::from_secs(10));
-
-    log::info!("Starting Slint UI...");
-
-    // Set up Slint platform.
-    let (platform, window) = slint_backend::EspDisplayPlatform::new();
-    slint::platform::set_platform(Box::new(platform)).expect("set_platform failed");
-
-    // Create and show the UI window
-    let ui = MainWindow::new().expect("MainWindow creation failed");
-    ui.show().expect("show failed");
-
-    // Render loop — never returns
-    slint_backend::run_event_loop(&window, &board.display);
+    log::info!("Entering heartbeat loop");
+    loop {
+        log::info!("heartbeat");
+        std::thread::sleep(std::time::Duration::from_secs(3));
+    }
 }

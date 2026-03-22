@@ -1059,6 +1059,7 @@ dependencies = [
  "bsp-waveshare-p4",
  "embuild",
  "esp-idf-svc",
+ "esp-idf-sys",
  "log",
  "slint",
  "slint-build",
