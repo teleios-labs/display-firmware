@@ -69,16 +69,16 @@ pub fn run_event_loop(window: &Rc<MinimalSoftwareWindow>, display: &Display) -> 
                     // Render this line into the buffer
                     render_fn(&mut self.line_buffer[range.clone()]);
 
-                    // Cast &[Rgb565Pixel] to &[u16] — Rgb565Pixel is #[repr(transparent)] u16
-                    let pixels_u16: &[u16] = unsafe {
+                    // Cast &[Rgb565Pixel] to raw bytes for draw_pixels_raw
+                    let pixels_bytes: &[u8] = unsafe {
                         std::slice::from_raw_parts(
-                            self.line_buffer[range.clone()].as_ptr() as *const u16,
-                            range.len(),
+                            self.line_buffer[range.clone()].as_ptr() as *const u8,
+                            range.len() * 2, // 2 bytes per Rgb565Pixel
                         )
                     };
 
                     // Push to display (ignore draw errors during render — log only)
-                    if let Err(e) = self.display.draw_pixels(line as u32, pixels_u16) {
+                    if let Err(e) = self.display.draw_pixels_raw(line as u32, pixels_bytes) {
                         log::error!("draw_pixels row {line}: {e}");
                     }
                 }

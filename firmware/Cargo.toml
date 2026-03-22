@@ -12,9 +12,17 @@ harness = false
 log = "0.4"
 anyhow = "1"
 esp-idf-svc = "0.52"
+esp-idf-sys = "0.37"
 bsp-waveshare-p4 = { path = "../bsp-waveshare-p4" }
 slint = { version = "1.15", default-features = false, features = ["compat-1-2", "unsafe-single-threaded", "libm", "renderer-software"] }
 
 [build-dependencies]
 embuild = "0.33"
 slint-build = "1.15"
+
+# Pull in the EK79007 display driver as an ESP-IDF managed component.
+# This downloads the C component, compiles it with ESP-IDF, and bindgen
+# generates Rust FFI bindings for its functions.
+[[package.metadata.esp-idf-sys.extra_components]]
+remote_component = { name = "espressif/esp_lcd_ek79007", version = "1.0.4" }
+bindings_header = "src/include/ek79007_bindings.h"

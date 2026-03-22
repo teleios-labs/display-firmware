@@ -1,4 +1,7 @@
 //! MIPI DSI display initialization for EK79007 panel.
+//!
+//! Uses the official `esp_lcd_ek79007` ESP-IDF component driver, which handles
+//! all DCS vendor commands, timing, and panel init internally.
 
 use crate::pins;
 use esp_idf_svc::sys::*;
@@ -27,9 +30,13 @@ impl std::fmt::Display for DisplayError {
 
 impl std::error::Error for DisplayError {}
 
-/// Convert an ESP-IDF error code to a Result.
 fn esp_check(err: esp_err_t) -> Result<(), EspError> {
     EspError::check_and_return(err, ())
+}
+
+fn log_step(msg: &str) {
+    log::info!("{msg}");
+    std::thread::sleep(std::time::Duration::from_millis(50));
 }
 
 /// Handle to an initialized display.
@@ -39,22 +46,15 @@ pub struct Display {
     ldo_handle: esp_ldo_channel_handle_t,
 }
 
-// Safety: The ESP-IDF panel and LDO handles are thread-safe (protected by internal locks).
 unsafe impl Send for Display {}
 
 impl Display {
-    /// Initialize the MIPI DSI display and backlight.
+    /// Initialize the MIPI DSI display using the official EK79007 driver.
     pub fn init() -> Result<Self, DisplayError> {
-        log::info!(
-            "Display init: EK79007 {}x{} via {}-lane MIPI DSI @ {} Mbps",
-            pins::LCD_H_RES,
-            pins::LCD_V_RES,
-            pins::DSI_LANE_COUNT,
-            pins::DSI_LANE_BITRATE_MBPS,
-        );
+        log_step("=== Display init (EK79007 driver) ===");
 
-        // 1. Enable LDO for DSI PHY power
-        log::info!("Enabling LDO ch{} at {}mV for DSI PHY", pins::DSI_LDO_CHANNEL, pins::DSI_LDO_VOLTAGE_MV);
+        // 1. LDO enable (DSI PHY power)
+        log_step("Step 1: LDO enable");
         let ldo_cfg = esp_ldo_channel_config_t {
             chan_id: pins::DSI_LDO_CHANNEL,
             voltage_mv: pins::DSI_LDO_VOLTAGE_MV,
@@ -66,12 +66,12 @@ impl Display {
                 .map_err(DisplayError::LdoInit)?;
         }
 
-        // 2. Create MIPI DSI bus
-        log::info!("Creating MIPI DSI bus ({} lanes)", pins::DSI_LANE_COUNT);
+        // 2. DSI bus
+        log_step("Step 2: DSI bus");
         let dsi_bus_cfg = esp_lcd_dsi_bus_config_t {
             bus_id: 0,
             num_data_lanes: pins::DSI_LANE_COUNT,
-            phy_clk_src: 0, // 0 = use legacy default; ESP-IDF auto-selects the correct PLL source
+            phy_clk_src: 0,
             lane_bit_rate_mbps: pins::DSI_LANE_BITRATE_MBPS,
         };
         let mut dsi_bus: esp_lcd_dsi_bus_handle_t = std::ptr::null_mut();
@@ -80,9 +80,23 @@ impl Display {
                 .map_err(DisplayError::DsiBusInit)?;
         }
 
-        // 3. Create DPI panel
-        log::info!("Creating DPI panel ({}x{} RGB565 @ {}MHz pclk)",
-            pins::LCD_H_RES, pins::LCD_V_RES, pins::LCD_PIXEL_CLOCK_MHZ);
+        // 3. DBI command IO (the EK79007 driver uses this to send DCS commands)
+        log_step("Step 3: DBI IO");
+        let dbi_cfg = esp_lcd_dbi_io_config_t {
+            virtual_channel: 0,
+            lcd_cmd_bits: 8,
+            lcd_param_bits: 8,
+        };
+        let mut dbi_io: esp_lcd_panel_io_handle_t = std::ptr::null_mut();
+        unsafe {
+            esp_check(esp_lcd_new_panel_io_dbi(dsi_bus, &dbi_cfg, &mut dbi_io))
+                .map_err(DisplayError::PanelInit)?;
+        }
+
+        // 4. Create EK79007 panel via the official driver
+        // This internally creates the DPI panel AND stores the DCS command sequence.
+        log_step("Step 4: EK79007 panel create");
+
         let video_timing = esp_lcd_video_timing_t {
             h_size: pins::LCD_H_RES,
             v_size: pins::LCD_V_RES,
@@ -94,35 +108,52 @@ impl Display {
             vsync_front_porch: pins::LCD_VSYNC_FRONT_PORCH,
         };
 
-        let mut dpi_cfg = esp_lcd_dpi_panel_config_t {
+        let dpi_cfg = esp_lcd_dpi_panel_config_t {
             virtual_channel: 0,
-            dpi_clk_src: 0, // 0 = use default; ESP-IDF auto-selects
+            dpi_clk_src: 0,
             dpi_clock_freq_mhz: pins::LCD_PIXEL_CLOCK_MHZ,
-            pixel_format: lcd_color_rgb_pixel_format_t_LCD_COLOR_PIXEL_FORMAT_RGB565,
-            in_color_format: lcd_color_format_t_LCD_COLOR_FMT_RGB565,
-            out_color_format: lcd_color_format_t_LCD_COLOR_FMT_RGB565,
+            pixel_format: lcd_color_rgb_pixel_format_t_LCD_COLOR_PIXEL_FORMAT_RGB888,
+            in_color_format: lcd_color_format_t_LCD_COLOR_FMT_RGB888,
+            out_color_format: lcd_color_format_t_LCD_COLOR_FMT_RGB888,
             video_timing,
+            num_fbs: 1,
             ..Default::default()
         };
-        // Use 1 framebuffer (minimum)
-        dpi_cfg.num_fbs = 1;
+
+        // Vendor config tells the EK79007 driver about the DSI bus and DPI settings.
+        // The driver creates the DPI panel internally.
+        let mut vendor_config = ek79007_vendor_config_t {
+            init_cmds: std::ptr::null(), // use default init commands
+            init_cmds_size: 0,
+            mipi_config: ek79007_vendor_config_t__bindgen_ty_1 {
+                dsi_bus,
+                dpi_config: &dpi_cfg,
+                lane_num: pins::DSI_LANE_COUNT,
+            },
+        };
+
+        let panel_dev_config = esp_lcd_panel_dev_config_t {
+            reset_gpio_num: pins::LCD_RESET,
+            bits_per_pixel: 24, // RGB888
+            vendor_config: &mut vendor_config as *mut _ as *mut _,
+            ..Default::default()
+        };
 
         let mut panel: esp_lcd_panel_handle_t = std::ptr::null_mut();
         unsafe {
-            esp_check(esp_lcd_new_panel_dpi(dsi_bus, &dpi_cfg, &mut panel))
+            esp_check(esp_lcd_new_panel_ek79007(dbi_io, &panel_dev_config, &mut panel))
                 .map_err(DisplayError::PanelInit)?;
         }
 
-        // 4. Init panel and turn on
-        // Note: DPI panels don't support reset — skip it (returns ESP_ERR_NOT_SUPPORTED)
-        log::info!("Initializing and enabling panel");
+        // 5. Reset + init the panel (driver sends all DCS commands + starts DPI stream)
+        log_step("Step 5: Panel reset + init");
         unsafe {
+            esp_check(esp_lcd_panel_reset(panel)).map_err(DisplayError::PanelInit)?;
             esp_check(esp_lcd_panel_init(panel)).map_err(DisplayError::PanelInit)?;
         }
 
-        // 5. Configure backlight (LEDC PWM)
-        log::info!("Configuring backlight PWM on GPIO{} (inverted, {}Hz)",
-            pins::LCD_BACKLIGHT, pins::BACKLIGHT_LEDC_FREQ_HZ);
+        // 6. Backlight
+        log_step("Step 6: Backlight");
         let timer_cfg = ledc_timer_config_t {
             speed_mode: ledc_mode_t_LEDC_LOW_SPEED_MODE,
             duty_resolution: ledc_timer_bit_t_LEDC_TIMER_10_BIT,
@@ -134,49 +165,33 @@ impl Display {
         unsafe {
             esp_check(ledc_timer_config(&timer_cfg)).map_err(DisplayError::BacklightInit)?;
         }
-
-        // Channel config — inverted: duty 0 = full brightness
-        let mut channel_cfg = ledc_channel_config_t {
+        let channel_cfg = ledc_channel_config_t {
             gpio_num: pins::LCD_BACKLIGHT,
             speed_mode: ledc_mode_t_LEDC_LOW_SPEED_MODE,
             channel: ledc_channel_t_LEDC_CHANNEL_1,
             intr_type: ledc_intr_type_t_LEDC_INTR_DISABLE,
             timer_sel: ledc_timer_t_LEDC_TIMER_1,
-            duty: 0, // inverted: 0 = max brightness
+            duty: 0, // try 0 — hardware may be active-low (0 = bright, 1023 = off)
             hpoint: 0,
             ..Default::default()
         };
-        // Set output_invert flag for inverted backlight
-        if pins::BACKLIGHT_OUTPUT_INVERT {
-            channel_cfg.flags.set_output_invert(1);
-        }
         unsafe {
             esp_check(ledc_channel_config(&channel_cfg)).map_err(DisplayError::BacklightInit)?;
+            esp_check(ledc_update_duty(ledc_mode_t_LEDC_LOW_SPEED_MODE, ledc_channel_t_LEDC_CHANNEL_1))
+                .map_err(DisplayError::BacklightInit)?;
         }
 
-        log::info!("Display initialized successfully");
+        log_step("=== Display init COMPLETE ===");
         Ok(Display { panel, ldo_handle })
     }
 
-    /// Draw a horizontal line of RGB565 pixels at the given y coordinate.
-    /// Called by the Slint render loop to push rendered lines to the display.
-    pub fn draw_pixels(&self, y: u32, pixels: &[u16]) -> Result<(), DisplayError> {
-        debug_assert!(
-            pixels.len() <= crate::pins::LCD_H_RES as usize,
-            "draw_pixels: pixel slice ({}) exceeds LCD_H_RES ({})",
-            pixels.len(),
-            crate::pins::LCD_H_RES
-        );
-
-        let x_end = pixels.len() as i32;
+    /// Draw a horizontal line of raw pixel bytes at the given y coordinate.
+    pub fn draw_pixels_raw(&self, y: u32, data: &[u8]) -> Result<(), DisplayError> {
         unsafe {
             esp_check(esp_lcd_panel_draw_bitmap(
-                self.panel,
-                0,
-                y as i32,
-                x_end,
-                (y + 1) as i32,
-                pixels.as_ptr() as *const _,
+                self.panel, 0, y as i32,
+                crate::pins::LCD_H_RES as i32, (y + 1) as i32,
+                data.as_ptr() as *const _,
             ))
             .map_err(DisplayError::DrawError)?;
         }

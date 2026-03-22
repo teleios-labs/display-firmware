@@ -12,3 +12,4 @@ build-std = ["std", "panic_abort"]
 MCU = "esp32p4"
 ESP_IDF_VERSION = "v5.5.2"
 ESP_IDF_SDKCONFIG_DEFAULTS = { value = "/Users/joelbell/teleios/display-firmware/firmware/sdkconfig.defaults", relative = false }
+ESP_IDF_SYS_ROOT_CRATE = "display-firmware"
