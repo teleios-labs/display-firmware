@@ -3,7 +3,8 @@ target = "riscv32imafc-esp-espidf"
 
 [target.riscv32imafc-esp-espidf]
 linker = "ldproxy"
-runner = "espflash flash --monitor"
+# espflash's bundled bootloader crashes pre-v3.0 P4 silicon; wrapper uses the ESP-IDF bootloader.
+runner = "./scripts/flash.sh"
 
 [unstable]
 build-std = ["std", "panic_abort"]
