@@ -65,7 +65,7 @@ fn render_hello_world(display: &bsp_waveshare_p4::Display) {
     let num_chars = chars.len();
     let scale = 6; // 6x scale: each character becomes 48x96 pixels
     let char_w = 8 * scale;
-    let char_h = 10 * scale; // only use top 10 rows of the 16-row font
+    let char_h = 12 * scale; // top 12 rows — comma descender uses rows 10-11
     let text_w = num_chars * char_w;
     let text_x = (width - text_w) / 2;
     let text_y = (height - char_h) / 2;
@@ -83,7 +83,7 @@ fn render_hello_world(display: &bsp_waveshare_p4::Display) {
         // Check if this row intersects the text
         if y >= text_y && y < text_y + char_h {
             let font_row = (y - text_y) / scale;
-            if font_row < 10 {
+            if font_row < 12 {
                 for (ci, (_name, bitmap)) in chars.iter().enumerate() {
                     let cx = text_x + ci * char_w;
                     let bits = bitmap[font_row];
